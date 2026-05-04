@@ -1,0 +1,17 @@
+.gradle/
+build/
+*.apk
+*.aab
+*.class
+*.jar
+!gradle-wrapper.jar
+*.kotlin_module
+local.properties
+.idea/
+*.iml
+.DS_Store
+*.log
+.kotlin/
+android-sdk/
+chese-kmp/
+logcat_*.txt
