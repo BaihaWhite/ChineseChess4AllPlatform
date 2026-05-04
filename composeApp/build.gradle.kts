@@ -73,6 +73,16 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.AppImage)
             packageName = "chinese-chess"
             packageVersion = "1.0.0"
+
+            linux {
+                iconFile.set(project.file("src/desktopMain/resources/icon-512.png"))
+            }
+            windows {
+                iconFile.set(project.file("src/desktopMain/resources/icon.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("src/desktopMain/resources/icon-512.png"))
+            }
         }
     }
 }
