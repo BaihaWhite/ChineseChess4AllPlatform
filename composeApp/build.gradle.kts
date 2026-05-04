@@ -39,6 +39,8 @@ kotlin {
 
         getByName("desktopMain").dependencies {
             implementation(compose.desktop.currentOs)
+            implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.8.18")
+            implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-x64:0.8.18")
         }
     }
 }
@@ -68,7 +70,7 @@ compose.desktop {
     application {
         mainClass = "com.chinesechess.MainKt"
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.AppImage)
             packageName = "chinese-chess"
             packageVersion = "1.0.0"
         }
