@@ -107,6 +107,7 @@ fun App(
             try {
                 delay(300)
                 val ai = ChessAI(engine, openingBook)
+                setupNativeEngine(ai)
                 currentAI = ai
                 val diff = DIFFICULTIES[difficulty.coerceIn(0, 3)]
                 DebugLog.log("AI: start mode=${diff.label} depth=${diff.depth} noise=${diff.evalNoise} bookNoise=${diff.bookNoiseChance} timeLimit=${diff.timeLimit}ms threads=${diff.threads} turn=${engine.currentTurn}")

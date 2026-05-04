@@ -2,11 +2,12 @@ package com.chinesechess.engine
 
 object DebugLog {
     private const val MAX = 200
+    private const val TAG = "ChessAI"
     private val buffer = ArrayDeque<String>(MAX)
     private var counter = 0L
 
     fun log(msg: String) {
-        println("DEBUG $msg")
+        platformLog(TAG, msg)
         synchronized(buffer) {
             counter++
             if (buffer.size >= MAX) buffer.removeFirst()

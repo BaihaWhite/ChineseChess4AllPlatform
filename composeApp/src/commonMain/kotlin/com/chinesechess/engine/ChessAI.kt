@@ -13,6 +13,10 @@ import kotlin.time.TimeSource
 
 class ChessAI(private val engine: ChessEngine, private val openingBook: OpeningBook? = null) {
 
+    var useNativeEngine: Boolean = false
+    var nativeSearchFn: ((board: Array<Array<Piece>>, turn: Int, depth: Int, timeMs: Int, history: LongArray) -> Int?)? = null
+    var nativeCancelFn: (() -> Unit)? = null
+
     private val baseValues = intArrayOf(0, 10000, 180, 220, 400, 900, 450, 100)
 
     private val redPawnPST = intArrayOf(
@@ -541,6 +545,27 @@ class ChessAI(private val engine: ChessEngine, private val openingBook: OpeningB
         val gameHashCounts = mutableMapOf<ULong, Int>()
         for (h in engine.getPositionHistory()) {
             gameHashCounts[h] = (gameHashCounts[h] ?: 0) + 1
+        }
+
+        if (useNativeEngine && nativeSearchFn != null) {
+            DebugLog.log("AI: using native Rust engine")
+            val turn = if (aiSide == PSide.RED) 1 else 2
+            val history = engine.getPositionHistory().map { it.toLong() }.toLongArray()
+            val rawResult = nativeSearchFn!!(engine.board, turn, maxDepth, timeLimit.toInt(), history)
+            if (rawResult != null && rawResult != 0) {
+                val fromRow = (rawResult shr 24) and 0xFF
+                val fromCol = (rawResult shr 16) and 0xFF
+                val toRow = (rawResult shr 8) and 0xFF
+                val toCol = rawResult and 0xFF
+                val matchedMove = allMoves.find {
+                    it.fromRow == fromRow && it.fromCol == fromCol && it.toRow == toRow && it.toCol == toCol
+                }
+                if (matchedMove != null) {
+                    DebugLog.log("AI: native result ${fromRow},${fromCol}->${toRow},${toCol}")
+                    return matchedMove
+                }
+            }
+            DebugLog.log("AI: native engine failed, falling back to Kotlin")
         }
 
         val result = if (actualThreads <= 1) {
