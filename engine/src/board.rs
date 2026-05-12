@@ -6,6 +6,8 @@ pub struct Board {
     pub current_turn: Side,
     pub zobrist_hash: u64,
     pub position_history: Vec<u64>,
+    pub consecutive_checks: [u8; 2],
+    checks_history: Vec<[u8; 2]>,
 }
 
 impl Board {
@@ -15,6 +17,8 @@ impl Board {
             current_turn: Side::Red,
             zobrist_hash: 0,
             position_history: Vec::new(),
+            consecutive_checks: [0, 0],
+            checks_history: Vec::new(),
         };
         b.init();
         b
@@ -63,6 +67,8 @@ impl Board {
 
         self.current_turn = Side::Red;
         self.position_history.clear();
+        self.consecutive_checks = [0, 0];
+        self.checks_history.clear();
         self.zobrist_hash = self.compute_zobrist();
     }
 
@@ -255,7 +261,7 @@ impl Board {
         b.kings_are_facing()
     }
 
-    pub fn would_repeat(&self, fx: i8, fy: i8, tx: i8, ty: i8) -> bool {
+    pub fn would_repeat(&self, fx: i8, fy: i8, tx: i8, ty: i8, gives_check: bool) -> bool {
         let mover = self.cells[fx as usize][fy as usize];
         let captured = self.cells[tx as usize][ty as usize];
         let mut new_hash = self.zobrist_hash;
@@ -267,22 +273,42 @@ impl Board {
         new_hash ^= zobrist::SIDE_TO_MOVE_KEY;
 
         let count = self.position_history.iter().filter(|&&h| h == new_hash).count();
-        count >= 2
+        let threshold: usize = if gives_check { 1 } else { 2 };
+        count >= threshold
+    }
+
+    fn would_give_check(&mut self, fx: i8, fy: i8, tx: i8, ty: i8) -> bool {
+        let mover = self.cells[fx as usize][fy as usize];
+        let captured = self.cells[tx as usize][ty as usize];
+        let opp = mover.side.opponent();
+        self.cells[tx as usize][ty as usize] = mover;
+        self.cells[fx as usize][fy as usize] = Piece::EMPTY;
+        let result = self.is_in_check(opp);
+        self.cells[fx as usize][fy as usize] = mover;
+        self.cells[tx as usize][ty as usize] = captured;
+        result
     }
 
     pub fn is_legal_move(&mut self, fx: i8, fy: i8, tx: i8, ty: i8) -> bool {
         if !self.is_valid_move(fx, fy, tx, ty) {
             return false;
         }
-        let side = self.cells[fx as usize][fy as usize].side;
-        if self.would_be_in_check(fx, fy, tx, ty, side) {
+        let mover = self.cells[fx as usize][fy as usize];
+        if self.would_be_in_check(fx, fy, tx, ty, mover.side) {
             return false;
         }
         if self.would_kings_face(fx, fy, tx, ty) {
             return false;
         }
-        if self.would_repeat(fx, fy, tx, ty) {
+        let gives_check = self.would_give_check(fx, fy, tx, ty);
+        if self.would_repeat(fx, fy, tx, ty, gives_check) {
             return false;
+        }
+        if gives_check {
+            let idx = side_index(mover.side);
+            if self.consecutive_checks[idx] >= 2 {
+                return false;
+            }
         }
         true
     }
@@ -313,6 +339,7 @@ impl Board {
         let ty = m.to_col as usize;
 
         self.position_history.push(self.zobrist_hash);
+        self.checks_history.push(self.consecutive_checks);
 
         let mover = self.cells[fx][fy];
         let captured = self.cells[tx][ty];
@@ -326,7 +353,16 @@ impl Board {
 
         self.cells[tx][ty] = mover;
         self.cells[fx][fy] = Piece::EMPTY;
+        let mover_side = self.current_turn;
         self.current_turn = self.current_turn.opponent();
+
+        let gives_check = self.is_in_check(self.current_turn);
+        let idx = side_index(mover_side);
+        if gives_check {
+            self.consecutive_checks[idx] += 1;
+        } else {
+            self.consecutive_checks[idx] = 0;
+        }
 
         captured
     }
@@ -351,6 +387,7 @@ impl Board {
         self.current_turn = self.current_turn.opponent();
 
         self.position_history.pop();
+        self.consecutive_checks = self.checks_history.pop().unwrap_or([0, 0]);
     }
 
     pub fn compute_zobrist(&self) -> u64 {
@@ -375,6 +412,8 @@ impl Board {
             current_turn: Side::Red,
             zobrist_hash: 0,
             position_history: Vec::new(),
+            consecutive_checks: [0, 0],
+            checks_history: Vec::new(),
         };
         for r in 0..10 {
             for c in 0..9 {
@@ -384,6 +423,15 @@ impl Board {
         }
         b.zobrist_hash = b.compute_zobrist();
         b
+    }
+}
+
+#[inline]
+fn side_index(side: Side) -> usize {
+    match side {
+        Side::Red => 0,
+        Side::Black => 1,
+        _ => 0,
     }
 }
 
@@ -415,6 +463,8 @@ impl Clone for Board {
             current_turn: self.current_turn,
             zobrist_hash: self.zobrist_hash,
             position_history: self.position_history.clone(),
+            consecutive_checks: self.consecutive_checks,
+            checks_history: self.checks_history.clone(),
         }
     }
 }

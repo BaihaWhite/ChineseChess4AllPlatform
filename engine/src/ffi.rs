@@ -17,6 +17,8 @@ pub extern "system" fn Java_com_chinesechess_engine_NativeEngine_chessSearch(
     time_ms: jni::sys::jint,
     history: jni::objects::JLongArray,
     history_len: jni::sys::jint,
+    red_checks: jni::sys::jint,
+    black_checks: jni::sys::jint,
 ) -> jni::sys::jint {
     let bytes: Vec<u8> = match _env.convert_byte_array(board_bytes) {
         Ok(b) => b,
@@ -35,6 +37,8 @@ pub extern "system" fn Java_com_chinesechess_engine_NativeEngine_chessSearch(
         2 => Side::Black,
         _ => Side::Red,
     };
+    board.consecutive_checks[0] = red_checks as u8;
+    board.consecutive_checks[1] = black_checks as u8;
 
     let game_history = if history_len > 0 {
         let mut buf = vec![0i64; history_len as usize];

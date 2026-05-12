@@ -25,6 +25,11 @@ class ChessEngine {
     var lastAIMove: Move? = null
         internal set
 
+    var consecutiveChecksRed = 0
+        private set
+    var consecutiveChecksBlack = 0
+        private set
+
     var zobristHash: ULong = 0UL
         internal set
 
@@ -71,6 +76,8 @@ class ChessEngine {
         c.playerSide = playerSide
         c.zobristHash = zobristHash
         c.positionHistory.addAll(positionHistory)
+        c.consecutiveChecksRed = consecutiveChecksRed
+        c.consecutiveChecksBlack = consecutiveChecksBlack
         return c
     }
 
@@ -106,6 +113,8 @@ class ChessEngine {
 
     private val positionHistory = mutableListOf<ULong>()
     private val moveHistory = mutableListOf<MoveRecord>()
+    private val checksRedHistory = mutableListOf<Int>()
+    private val checksBlackHistory = mutableListOf<Int>()
 
     fun initBoard() {
         for (i in 0..9) for (j in 0..8) board[i][j] = Piece()
@@ -136,6 +145,10 @@ class ChessEngine {
         validMoves = emptyList()
         positionHistory.clear()
         moveHistory.clear()
+        checksRedHistory.clear()
+        checksBlackHistory.clear()
+        consecutiveChecksRed = 0
+        consecutiveChecksBlack = 0
         zobristHash = computeZobrist()
     }
 
@@ -283,12 +296,41 @@ class ChessEngine {
         return count >= 2
     }
 
+    private fun wouldGiveCheck(fx: Int, fy: Int, tx: Int, ty: Int): Boolean {
+        val mover = board[fx][fy]
+        val captured = board[tx][ty]
+        val opp = if (mover.side == PSide.RED) PSide.BLACK else PSide.RED
+        board[tx][ty] = mover
+        board[fx][fy] = Piece()
+        val result = isInCheck(opp)
+        board[fx][fy] = mover
+        board[tx][ty] = captured
+        return result
+    }
+
     fun isLegalMove(fx: Int, fy: Int, tx: Int, ty: Int): Boolean {
         if (!isValidMove(fx, fy, tx, ty)) return false
         if (wouldBeInCheck(fx, fy, tx, ty, board[fx][fy].side)) return false
         if (wouldKingsFace(fx, fy, tx, ty)) return false
         if (wouldRepeat(fx, fy, tx, ty)) return false
+        val side = board[fx][fy].side
+        if (wouldGiveCheck(fx, fy, tx, ty)) {
+            val checks = if (side == PSide.RED) consecutiveChecksRed else consecutiveChecksBlack
+            if (checks >= 2) return false
+        }
         return true
+    }
+
+    fun legalMovesForCell(row: Int, col: Int): List<Move> {
+        val saved = currentTurn
+        currentTurn = board[row][col].side
+        val moves = buildList {
+            for (ti in 0..9) for (tj in 0..8) {
+                if (isLegalMove(row, col, ti, tj)) add(Move(row, col, ti, tj))
+            }
+        }
+        currentTurn = saved
+        return moves
     }
 
     fun getAllLegalMoves(s: PSide): List<Move> {
@@ -311,8 +353,12 @@ class ChessEngine {
     var onMoveExecuted: ((Move) -> Unit)? = null
 
     fun executeMove(fx: Int, fy: Int, tx: Int, ty: Int) {
+        val moverSide = board[fx][fy].side
         moveHistory.add(MoveRecord(fx, fy, tx, ty, board[tx][ty]))
         positionHistory.add(zobristHash)
+        checksRedHistory.add(consecutiveChecksRed)
+        checksBlackHistory.add(consecutiveChecksBlack)
+
         board[tx][ty] = board[fx][fy]
         board[fx][fy] = Piece()
         currentTurn = if (currentTurn == PSide.RED) PSide.BLACK else PSide.RED
@@ -323,6 +369,12 @@ class ChessEngine {
         if (cap.type != PType.EMPTY)
             zobristHash = zobristHash xor zobristPiece(cap.type, cap.side, tx, ty)
         zobristHash = zobristHash xor sideToMoveKey
+
+        if (isInCheck(currentTurn)) {
+            if (moverSide == PSide.RED) consecutiveChecksRed++ else consecutiveChecksBlack++
+        } else {
+            if (moverSide == PSide.RED) consecutiveChecksRed = 0 else consecutiveChecksBlack = 0
+        }
 
         if (getAllLegalMoves(currentTurn).isEmpty()) {
             gameOver = true
@@ -349,6 +401,8 @@ class ChessEngine {
         gameOver = false
         drawGame = false
         positionHistory.removeLastOrNull()
+        consecutiveChecksRed = checksRedHistory.removeLastOrNull() ?: 0
+        consecutiveChecksBlack = checksBlackHistory.removeLastOrNull() ?: 0
         selRow = -1
         selCol = -1
         validMoves = emptyList()

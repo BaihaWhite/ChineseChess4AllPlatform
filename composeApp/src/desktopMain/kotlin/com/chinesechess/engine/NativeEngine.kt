@@ -7,6 +7,7 @@ actual object NativeEngine {
         try {
             System.loadLibrary("chess_engine")
             loaded = true
+            DebugLog.info("Native", "Rust engine loaded")
         } catch (e: UnsatisfiedLinkError) {
             DebugLog.error("Native", "Failed to load: ${e.message}")
         }

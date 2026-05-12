@@ -170,21 +170,27 @@ impl SearchEngine {
         let hash = board.zobrist_hash;
         state.search_hashes[ply] = hash;
 
+        let is_root = ply == 0;
+        let in_check = board.is_in_check(board.current_turn);
+
         if ply > 0 {
             for i in 0..ply {
                 if state.search_hashes[i] == hash {
+                    if in_check {
+                        return MATE_SCORE - ply as i32;
+                    }
                     return 0;
                 }
             }
             if let Some(&cnt) = state.game_hash_counts.get(&hash) {
                 if cnt >= 2 {
+                    if in_check {
+                        return MATE_SCORE - ply as i32;
+                    }
                     return 0;
                 }
             }
         }
-
-        let is_root = ply == 0;
-        let in_check = board.is_in_check(board.current_turn);
 
         if in_check && depth <= 0 && ply < 60 {
             return self.negamax(board, 1, alpha, beta, ply, false, prev_from, prev_to, state);

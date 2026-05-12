@@ -54,7 +54,7 @@ fun App(
     var showInviteDialog by remember { mutableStateOf<InviteInfo?>(null) }
     val scope = rememberCoroutineScope()
     var aiJob by remember { mutableStateOf<Job?>(null) }
-    var currentAI by remember { mutableStateOf<ChessAI?>(null) }
+    var currentAI by remember { mutableStateOf<AIController?>(null) }
     var aiDepth by remember { mutableIntStateOf(DIFFICULTIES[1].depth) }
     var difficulty by remember { mutableIntStateOf(1) } // 0=初级 1=中级 2=高级 3=大师
     var frozenBoard by remember { mutableStateOf<Array<Array<Piece>>?>(null) }
@@ -67,20 +67,19 @@ fun App(
     suspend fun loadOpeningBook(): OpeningBook? {
         return withContext(Dispatchers.Default) {
             try {
-                DebugLog.log("Book: reading bytes...")
+                DebugLog.info("Book", "Loading...")
                 val bytes = readResourceBytes("composeResources/chinese_chess.composeapp.generated.resources/files/opening_book.txt")
-                DebugLog.log("Book: read ${bytes.size} bytes, parsing...")
                 if (bytes.isNotEmpty()) {
                     OpeningBook().apply {
                         deserialize(bytes.decodeToString())
-                        DebugLog.log("Book: loaded ${size} entries OK")
+                        DebugLog.info("Book", "Loaded $size entries")
                     }
                 } else {
-                    DebugLog.log("Book: empty file")
+                    DebugLog.warn("Book", "File empty")
                     null
                 }
             } catch (e: Exception) {
-                DebugLog.log("Book: FAILED ${e.message}")
+                DebugLog.error("Book", "Failed: ${e.message}")
                 null
             }
         }
@@ -106,34 +105,29 @@ fun App(
         aiJob = scope.launch {
             try {
                 delay(300)
-                val ai = ChessAI(engine, openingBook)
-                setupNativeEngine(ai)
+                val ai = AIController(engine, openingBook)
                 currentAI = ai
                 val diff = DIFFICULTIES[difficulty.coerceIn(0, 3)]
-                DebugLog.log("AI: start mode=${diff.label} depth=${diff.depth} noise=${diff.evalNoise} bookNoise=${diff.bookNoiseChance} timeLimit=${diff.timeLimit}ms threads=${diff.threads} turn=${engine.currentTurn}")
+                DebugLog.info("AI", "${diff.label} depth=${diff.depth} time=${diff.timeLimit}ms")
                 val move = withContext(Dispatchers.Default) {
                     ai.getAIMove(diff.depth, diff.evalNoise, diff.bookNoiseChance, diff.timeLimit, diff.randomMoveChance, diff.threads)
                 }
-                DebugLog.log("AI: getAIMove returned, on main thread now")
                 currentAI = null
                 frozenBoard = null
                 if (move != null) {
-                    DebugLog.log("AI: executing ${move.fromRow},${move.fromCol}->${move.toRow},${move.toCol}")
                     engine.executeMove(move.fromRow, move.fromCol, move.toRow, move.toCol)
-                    DebugLog.log("AI: executeMove done, turn=${engine.currentTurn} gameOver=${engine.gameOver}")
                     engine.lastAIMove = move
+                    DebugLog.debug("AI", "Move ${move.fromRow},${move.fromCol}->${move.toRow},${move.toCol}")
                 } else {
-                    DebugLog.log("AI: no legal moves, AI loses")
                     engine.gameOver = true
                     engine.setDrawGame(false)
+                    DebugLog.info("AI", "No moves — loses")
                 }
-                DebugLog.log("AI: setting aiThinking=false")
                 aiThinking = false
                 boardVersion++
                 onMove(move)
-                DebugLog.log("AI: done")
             } catch (e: Exception) {
-                DebugLog.log("AI: CRASH ${e.message} at ${e.stackTraceToString()}")
+                DebugLog.error("AI", "${e.message}")
                 currentAI = null
                 frozenBoard = null
                 aiThinking = false
@@ -509,10 +503,10 @@ fun GameScreen(
                 if (engine.gameMode == GameMode.VS_AI) {
                     engine.undoMove()
                     engine.undoMove()
-                    DebugLog.log("UNDO: AI mode, undone 2 moves")
+                    DebugLog.debug("Game", "Undo 2")
                 } else {
                     engine.undoMove()
-                    DebugLog.log("UNDO: 1 move")
+                    DebugLog.debug("Game", "Undo 1")
                 }
                 engine.lastAIMove = null
                 selRow = -1; selCol = -1; validMoves = emptyList()

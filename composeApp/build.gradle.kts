@@ -84,6 +84,7 @@ compose.desktop {
                 iconFile.set(project.file("src/desktopMain/resources/icon-512.png"))
             }
         }
+        jvmArgs("-Djava.library.path=${rootProject.file("engine/target/release")}")
     }
 }
 
@@ -92,19 +93,5 @@ gradle.projectsEvaluated {
     project.tasks.withType<JavaExec>().matching { it.name == "desktopRun" }.configureEach {
         mainClass.set("com.chinesechess.MainKt")
         classpath = desktopComp.output.classesDirs + desktopComp.compileDependencyFiles + (desktopComp.runtimeDependencyFiles ?: project.files())
-    }
-
-    project.tasks.register<JavaExec>("generateOpeningBook") {
-        group = "application"
-        description = "Run self-play to generate the opening book. Customize with -PbookGames=500 -PbookPly=16 -PbookTopK=4"
-        mainClass.set("com.chinesechess.engine.OpeningBookGenerator")
-        classpath = desktopComp.output.classesDirs + desktopComp.compileDependencyFiles + (desktopComp.runtimeDependencyFiles ?: project.files())
-        args = listOf(
-            project.findProperty("bookGames")?.toString() ?: "300",
-            project.findProperty("bookPly")?.toString() ?: "14",
-            project.findProperty("bookTopK")?.toString() ?: "4",
-            project.findProperty("bookOutput")?.toString() ?: "${project.projectDir}/src/commonMain/composeResources/files/opening_book.txt",
-            project.findProperty("bookSave")?.toString() ?: "2000"
-        )
     }
 }
