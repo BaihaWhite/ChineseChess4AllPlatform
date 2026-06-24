@@ -1,5 +1,8 @@
 package com.chinesechess.engine
 
+import android.content.Context
+import java.io.File
+
 actual object NativeEngine {
     private var loaded = false
 
@@ -12,7 +15,34 @@ actual object NativeEngine {
         }
     }
 
+    /**
+     * Copy NNUE weights from assets to internal storage and load into engine.
+     * Call from MainActivity.onCreate after library load.
+     */
+    fun loadNNUE(context: Context) {
+        if (!loaded) return
+        try {
+            val dest = File(context.filesDir, "nnue_trained.bin")
+            if (!dest.exists()) {
+                context.assets.open("nnue_trained.bin").use { input ->
+                    dest.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                DebugLog.info("NNUE", "Copied to ${dest.absolutePath}")
+            }
+            val ok = chessLoadNNUE(dest.absolutePath)
+            DebugLog.info("NNUE", "Load result: $ok")
+        } catch (e: Exception) {
+            DebugLog.error("NNUE", "Failed: ${e.message}")
+        }
+    }
+
     actual val isAvailable: Boolean get() = loaded
+
+    actual val threadCount: Int get() = 1
+    actual val lastSearchDepth: Int get() = 0
+    actual val lastSearchNodes: Long get() = 0L
 
     actual fun search(
         board: Array<Array<Piece>>,
@@ -51,6 +81,8 @@ actual object NativeEngine {
     actual fun cancel() {
         chessCancel()
     }
+
+    private external fun chessLoadNNUE(path: String): Boolean
 
     private external fun chessSearch(
         board: ByteArray,

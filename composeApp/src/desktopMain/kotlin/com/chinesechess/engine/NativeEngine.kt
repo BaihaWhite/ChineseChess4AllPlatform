@@ -1,19 +1,70 @@
 package com.chinesechess.engine
 
+import java.io.File
+
 actual object NativeEngine {
     private var loaded = false
 
     init {
         try {
-            System.loadLibrary("chess_engine")
+            loadFromResources()
             loaded = true
             DebugLog.info("Native", "Rust engine loaded")
         } catch (e: UnsatisfiedLinkError) {
             DebugLog.error("Native", "Failed to load: ${e.message}")
+        } catch (e: Exception) {
+            DebugLog.error("Native", "Failed: ${e.message}")
+        }
+    }
+
+    private fun loadFromResources() {
+        val os = System.getProperty("os.name").lowercase()
+        val (dir, libName) = when {
+            os.contains("win") -> "windows-x86-64" to "chess_engine.dll"
+            os.contains("linux") -> "linux-x86-64" to "libchess_engine.so"
+            os.contains("mac") -> "macos-x86-64" to "libchess_engine.dylib"
+            else -> throw UnsatisfiedLinkError("Unsupported OS: $os")
+        }
+        val resourcePath = "/natives/$dir/$libName"
+        val input = NativeEngine::class.java.getResourceAsStream(resourcePath)
+            ?: throw UnsatisfiedLinkError("Native lib not found in resources: $resourcePath")
+        val tmpDir = File(System.getProperty("java.io.tmpdir"), "chinese-chess-natives")
+        tmpDir.mkdirs()
+        val tmpFile = File(tmpDir, libName)
+        if (!tmpFile.exists() || tmpFile.length() == 0L) {
+            tmpFile.outputStream().use { input.copyTo(it) }
+            tmpFile.deleteOnExit()
+        } else {
+            input.close()
+        }
+        System.load(tmpFile.absolutePath)
+
+        // Extract and load NNUE weights from resources
+        try {
+            val nnueResource = NativeEngine::class.java.getResourceAsStream("/nnue_trained.bin")
+            if (nnueResource != null) {
+                val nnueFile = File(tmpDir, "nnue_trained.bin")
+                if (!nnueFile.exists() || nnueFile.length() == 0L) {
+                    nnueFile.outputStream().use { nnueResource.copyTo(it) }
+                    nnueFile.deleteOnExit()
+                } else {
+                    nnueResource.close()
+                }
+                val ok = chessLoadNNUE(nnueFile.absolutePath)
+                DebugLog.info("NNUE", "Loaded: $ok")
+            } else {
+                DebugLog.warn("NNUE", "Not found in resources, using HCE")
+            }
+        } catch (e: Throwable) {
+            DebugLog.error("NNUE", "JNI failed: ${e.message}")
         }
     }
 
     actual val isAvailable: Boolean get() = loaded
+
+    actual val threadCount: Int get() = if (loaded) chessGetThreadCount() else 1
+    actual val lastSearchDepth: Int get() = if (loaded) chessGetLastDepth() else 0
+    actual val lastSearchNodes: Long get() = if (loaded) chessGetLastNodes() else 0L
 
     actual fun search(
         board: Array<Array<Piece>>,
@@ -64,5 +115,9 @@ actual object NativeEngine {
         blackChecks: Int
     ): Int
 
+    private external fun chessLoadNNUE(path: String): Boolean
+    private external fun chessGetThreadCount(): Int
+    private external fun chessGetLastDepth(): Int
+    private external fun chessGetLastNodes(): Long
     private external fun chessCancel()
 }

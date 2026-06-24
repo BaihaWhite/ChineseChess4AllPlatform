@@ -1,7 +1,7 @@
 use crate::types::*;
 
-thread_local! {
-    static ZOBRIST_TABLE: [[[u64; 9]; 10]; 16] = {
+lazy_static::lazy_static! {
+    static ref ZOBRIST_TABLE: [[[u64; 9]; 10]; 16] = {
         let mut rng = SplitMix64 { state: 20240101u64 };
         let mut table = [[[0u64; 9]; 10]; 16];
         for pt in 0..8usize {
@@ -44,7 +44,7 @@ pub fn zobrist_piece(pt: PieceType, side: Side, row: u8, col: u8) -> u64 {
         Side::Black => 1usize,
         _ => return 0,
     };
-    ZOBRIST_TABLE.with(|table| table[pt_idx * 2 + side_idx][row as usize][col as usize])
+    ZOBRIST_TABLE[pt_idx * 2 + side_idx][row as usize][col as usize]
 }
 
 #[cfg(test)]

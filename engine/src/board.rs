@@ -24,6 +24,17 @@ impl Board {
         b
     }
 
+    pub fn empty() -> Self {
+        Board {
+            cells: [[Piece::EMPTY; 9]; 10],
+            current_turn: Side::Red,
+            zobrist_hash: 0,
+            position_history: Vec::new(),
+            consecutive_checks: [0, 0],
+            checks_history: Vec::new(),
+        }
+    }
+
     pub fn init(&mut self) {
         for r in 0..10 {
             for c in 0..9 {
@@ -115,6 +126,13 @@ impl Board {
     }
 
     pub fn is_valid_move(&self, fx: i8, fy: i8, tx: i8, ty: i8) -> bool {
+        self.is_valid_move_for_side(fx, fy, tx, ty, self.current_turn)
+    }
+
+    /// Like `is_valid_move` but checks if a piece of `side` at (fx,fy) can
+    /// legally move to (tx,ty), regardless of whose turn it actually is.
+    /// Used by `is_in_check` to avoid needing `&mut self`.
+    pub fn is_valid_move_for_side(&self, fx: i8, fy: i8, tx: i8, ty: i8, side: Side) -> bool {
         if !Self::in_board(tx, ty) {
             return false;
         }
@@ -122,11 +140,11 @@ impl Board {
             return false;
         }
         let mover = self.cells[fx as usize][fy as usize];
-        if mover.side != self.current_turn {
+        if mover.side != side {
             return false;
         }
         let target = self.cells[tx as usize][ty as usize];
-        if target.side == self.current_turn {
+        if target.side == side {
             return false;
         }
 
@@ -220,25 +238,21 @@ impl Board {
         }
     }
 
-    pub fn is_in_check(&mut self, side: Side) -> bool {
+    pub fn is_in_check(&self, side: Side) -> bool {
         let king = match self.find_king(side) {
             Some(k) => k,
             None => return true,
         };
         let opp = side.opponent();
-        let saved = self.current_turn;
-        self.current_turn = opp;
         for r in 0..10i8 {
             for c in 0..9i8 {
                 if self.cells[r as usize][c as usize].side == opp
-                    && self.is_valid_move(r, c, king.0, king.1)
+                    && self.is_valid_move_for_side(r, c, king.0, king.1, opp)
                 {
-                    self.current_turn = saved;
                     return true;
                 }
             }
         }
-        self.current_turn = saved;
         false
     }
 
@@ -253,12 +267,15 @@ impl Board {
         check
     }
 
-    pub fn would_kings_face(&self, fx: i8, fy: i8, tx: i8, ty: i8) -> bool {
+    pub fn would_kings_face(&mut self, fx: i8, fy: i8, tx: i8, ty: i8) -> bool {
         let mover = self.cells[fx as usize][fy as usize];
-        let mut b = self.clone();
-        b.cells[tx as usize][ty as usize] = mover;
-        b.cells[fx as usize][fy as usize] = Piece::EMPTY;
-        b.kings_are_facing()
+        let captured = self.cells[tx as usize][ty as usize];
+        self.cells[tx as usize][ty as usize] = mover;
+        self.cells[fx as usize][fy as usize] = Piece::EMPTY;
+        let result = self.kings_are_facing();
+        self.cells[fx as usize][fy as usize] = mover;
+        self.cells[tx as usize][ty as usize] = captured;
+        result
     }
 
     pub fn would_repeat(&self, fx: i8, fy: i8, tx: i8, ty: i8, gives_check: bool) -> bool {
@@ -313,9 +330,11 @@ impl Board {
         true
     }
 
-    pub fn generate_legal_moves(&mut self) -> Vec<Move> {
+    /// Generate legal moves into an existing buffer, clearing it first.
+    /// Prefer this over `generate_legal_moves` in hot loops to reuse allocation.
+    pub fn generate_legal_moves_into(&mut self, moves: &mut Vec<Move>) {
+        moves.clear();
         let side = self.current_turn;
-        let mut moves = Vec::new();
         for r in 0..10i8 {
             for c in 0..9i8 {
                 if self.cells[r as usize][c as usize].side == side {
@@ -325,6 +344,47 @@ impl Board {
                                 moves.push(Move::new(r as u8, c as u8, tr as u8, tc as u8));
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn generate_legal_moves(&mut self) -> Vec<Move> {
+        let mut moves = Vec::new();
+        self.generate_legal_moves_into(&mut moves);
+        moves
+    }
+
+    /// Generate only capture moves (target square has enemy piece). Faster than
+    /// `generate_legal_moves` for qsearch.
+    pub fn generate_legal_captures(&mut self) -> Vec<Move> {
+        let side = self.current_turn;
+        let opp = side.opponent();
+        let mut moves = Vec::new();
+
+        // Collect enemy piece positions
+        let mut targets: [(i8, i8); 16] = [(0, 0); 16];
+        let mut n_targets = 0usize;
+        for r in 0..10i8 {
+            for c in 0..9i8 {
+                if self.cells[r as usize][c as usize].side == opp {
+                    targets[n_targets] = (r, c);
+                    n_targets += 1;
+                }
+            }
+        }
+
+        // For each friendly piece, check only enemy targets
+        for r in 0..10i8 {
+            for c in 0..9i8 {
+                if self.cells[r as usize][c as usize].side != side {
+                    continue;
+                }
+                for i in 0..n_targets {
+                    let (tr, tc) = targets[i];
+                    if self.is_legal_move(r, c, tr, tc) {
+                        moves.push(Move::new(r as u8, c as u8, tr as u8, tc as u8));
                     }
                 }
             }
@@ -423,6 +483,60 @@ impl Board {
         }
         b.zobrist_hash = b.compute_zobrist();
         b
+    }
+
+    /// Set the position history (Zobrist hashes) for repetition detection.
+    /// Call this after `from_bytes` if the JNI side provides game history.
+    pub fn set_position_history(&mut self, history: &[u64]) {
+        self.position_history.clear();
+        self.position_history.extend_from_slice(history);
+    }
+
+    /// Encode board as a compact FEN-like string for logging/debugging.
+    /// Format: piece placement (rows 0-9, separated by '/') + ' ' + side to move
+    /// Red pieces: uppercase K A E N R C P, Black: lowercase k a e n r c p
+    pub fn to_fen(&self) -> String {
+        let mut fen = String::with_capacity(60);
+        for r in 0..10 {
+            if r > 0 {
+                fen.push('/');
+            }
+            let mut empty = 0;
+            for c in 0..9 {
+                let p = self.cells[r][c];
+                if p.is_empty() {
+                    empty += 1;
+                } else {
+                    if empty > 0 {
+                        fen.push_str(&empty.to_string());
+                        empty = 0;
+                    }
+                    let ch = match p.piece_type {
+                        PieceType::King => 'k',
+                        PieceType::Advisor => 'a',
+                        PieceType::Elephant => 'e',
+                        PieceType::Horse => 'n',
+                        PieceType::Chariot => 'r',
+                        PieceType::Cannon => 'c',
+                        PieceType::Pawn => 'p',
+                        _ => '?',
+                    };
+                    fen.push(if p.side == Side::Red {
+                        ch.to_ascii_uppercase()
+                    } else {
+                        ch
+                    });
+                }
+            }
+            if empty > 0 {
+                fen.push_str(&empty.to_string());
+            }
+        }
+        fen.push(' ');
+        fen.push(if self.current_turn == Side::Red { 'w' } else { 'b' });
+        fen.push(' ');
+        fen.push_str(&format!("{:016x}", self.zobrist_hash));
+        fen
     }
 }
 

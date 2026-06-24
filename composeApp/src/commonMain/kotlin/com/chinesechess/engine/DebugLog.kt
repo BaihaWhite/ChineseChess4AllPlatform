@@ -29,5 +29,9 @@ object DebugLog {
         buffer.takeLast(n).joinToString("\n")
     }
 
+    fun getAll(): String = synchronized(buffer) {
+        buffer.joinToString("\n")
+    }
+
     fun clear() = synchronized(buffer) { buffer.clear() }
 }

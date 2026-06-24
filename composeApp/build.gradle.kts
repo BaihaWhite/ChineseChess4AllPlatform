@@ -40,6 +40,7 @@ kotlin {
         getByName("desktopMain").dependencies {
             implementation(compose.desktop.currentOs)
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.8.18")
+            implementation("org.jetbrains.skiko:skiko-awt-runtime-linux-x64:0.8.18")
             implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-x64:0.8.18")
         }
     }
@@ -49,12 +50,30 @@ android {
     namespace = "com.chinesechess.app"
     compileSdk = 35
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("chinese-chess.keystore")
+            storePassword = "android123"
+            keyAlias = "chinesechess"
+            keyPassword = "android123"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
     defaultConfig {
         applicationId = "com.chinesechess.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     compileOptions {
@@ -86,6 +105,23 @@ compose.desktop {
         }
         jvmArgs("-Djava.library.path=${rootProject.file("engine/target/release")}")
     }
+}
+
+// Cross-platform uber-jar task
+tasks.register<Jar>("packageCrossPlatformJar") {
+    dependsOn("desktopJar")
+    group = "compose desktop"
+    description = "Create a cross-platform uber-jar with native libs for Linux and Windows"
+    archiveBaseName.set("chinese-chess-crossplatform")
+    archiveVersion.set("")
+    archiveClassifier.set("")
+    manifest {
+        attributes("Main-Class" to "com.chinesechess.MainKt")
+    }
+    from(configurations.getByName("desktopRuntimeClasspath").map { if (it.isDirectory) it else zipTree(it) })
+    from("build/classes/kotlin/desktop/main")
+    from("build/processedResources/desktop/main")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 gradle.projectsEvaluated {

@@ -3,6 +3,7 @@ pub mod zobrist;
 pub mod board;
 pub mod evaluate;
 pub mod tt;
+pub mod nnue;
 pub mod search;
 pub mod ffi;
 
@@ -10,7 +11,6 @@ pub mod ffi;
 mod tests {
     use crate::board::Board;
     use crate::search::SearchEngine;
-    use crate::types::*;
 
     #[test]
     fn test_initial_legal_moves() {

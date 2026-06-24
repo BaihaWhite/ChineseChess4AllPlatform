@@ -19,11 +19,9 @@ class AIController(private val engine: ChessEngine, private val openingBook: Ope
 
     suspend fun getAIMove(
         searchDepth: Int = 3,
-        noise: Int = 0,
-        randomPickChance: Float = 0f,
+        bookRandomChance: Float = 0f,
         userTimeLimit: Long = 0L,
-        randomMoveChance: Float = 0f,
-        threads: Int = 1
+        randomMoveChance: Float = 0f
     ): Move? = withContext(Dispatchers.Default) {
         cancelled = false
 
@@ -45,7 +43,7 @@ class AIController(private val engine: ChessEngine, private val openingBook: Ope
                 }
                 if (validBookMoves.isNotEmpty()) {
                     DebugLog.info("Book", "${validBookMoves.size} moves")
-                    if (randomPickChance > 0f && Random.nextFloat() < randomPickChance) {
+                    if (bookRandomChance > 0f && Random.nextFloat() < bookRandomChance) {
                         DebugLog.debug("Book", "Noise override")
                         return@withContext allMoves.random()
                     }
@@ -69,7 +67,14 @@ class AIController(private val engine: ChessEngine, private val openingBook: Ope
         val turn = if (aiSide == PSide.RED) 1 else 2
         val history = engine.getPositionHistory().map { it.toLong() }.toLongArray()
 
+        val t0 = System.nanoTime()
         val rawResult = NativeEngine.search(engine.board, turn, maxDepth, timeLimit.toInt(), history, engine.consecutiveChecksRed, engine.consecutiveChecksBlack)
+        val elapsed = (System.nanoTime() - t0) / 1_000_000
+        val actualDepth = NativeEngine.lastSearchDepth
+        val nodes = NativeEngine.lastSearchNodes
+
+        val threads = NativeEngine.threadCount
+        DebugLog.info("AI", "Depth=$actualDepth Nodes=${nodes / 1000}K ${elapsed}ms ${threads}T")
 
         if (rawResult != 0) {
             val fromRow = (rawResult shr 24) and 0xFF

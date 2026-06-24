@@ -9,6 +9,31 @@ crate-type = ["cdylib", "staticlib", "lib"]
 [dependencies]
 lazy_static = "1.5"
 jni = "0.21"
+rayon = "1"
+
+[[bin]]
+name = "gen_data"
+path = "src/bin/gen_data.rs"
+
+[[bin]]
+name = "match_runner"
+path = "src/bin/match_runner.rs"
+
+[[bin]]
+name = "rescore"
+path = "src/bin/rescore.rs"
+
+[[bin]]
+name = "diag_nnue"
+path = "src/bin/diag_nnue.rs"
+
+[[bin]]
+name = "bench_search"
+path = "src/bin/bench_search.rs"
+
+[[bin]]
+name = "parse_pgn"
+path = "src/bin/parse_pgn.rs"
 
 [profile.release]
 opt-level = 3

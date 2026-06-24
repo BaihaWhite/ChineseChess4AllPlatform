@@ -17,3 +17,22 @@ chese-kmp/
 logcat_*.txt
 engine/target/
 ni-config/
+
+# Binary assets
+*.so
+*.dll
+*.dylib
+*.bin
+*.keystore
+*.zip
+chinese-chess.jar
+chinese-chess.apk
+
+# Training artifacts
+engine/training/__pycache__/
+engine/training/*.pth
+engine/training/*.pt
+engine/training/*.json
+engine/training/data/
+engine/training/checkpoint_*
+engine/training/nnue_trained.pth

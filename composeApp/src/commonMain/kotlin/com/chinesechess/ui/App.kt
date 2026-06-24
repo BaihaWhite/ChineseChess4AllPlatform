@@ -32,13 +32,13 @@ import org.jetbrains.compose.resources.readResourceBytes
 
 enum class Screen { MENU, SELECT, PLAY, LOBBY }
 
-data class Difficulty(val label: String, val depth: Int, val evalNoise: Int, val bookNoiseChance: Float, val timeLimit: Long, val randomMoveChance: Float, val threads: Int = 1)
+data class Difficulty(val label: String, val depth: Int, val bookRandomChance: Float, val timeLimit: Long, val randomMoveChance: Float)
 
 val DIFFICULTIES = listOf(
-    Difficulty("初级", 2, 200, 0.50f, 1000L, 0.15f, 2),
-    Difficulty("中级", 4, 50, 0.10f, 3000L, 0f, 4),
-    Difficulty("高级", 7, 0, 0f, 10000L, 0f, 8),
-    Difficulty("大师", 12, 0, 0f, 60000L, 0f, 16)
+    Difficulty("初级", 3, 0.25f, 1000L, 0.10f),
+    Difficulty("中级", 6, 0.10f, 3000L, 0f),
+    Difficulty("高级", 9, 0f, 10000L, 0f),
+    Difficulty("大师", 99, 0f, 60000L, 0f)
 )
 
 @Composable
@@ -110,7 +110,7 @@ fun App(
                 val diff = DIFFICULTIES[difficulty.coerceIn(0, 3)]
                 DebugLog.info("AI", "${diff.label} depth=${diff.depth} time=${diff.timeLimit}ms")
                 val move = withContext(Dispatchers.Default) {
-                    ai.getAIMove(diff.depth, diff.evalNoise, diff.bookNoiseChance, diff.timeLimit, diff.randomMoveChance, diff.threads)
+                    ai.getAIMove(diff.depth, diff.bookRandomChance, diff.timeLimit, diff.randomMoveChance)
                 }
                 currentAI = null
                 frozenBoard = null
@@ -238,12 +238,16 @@ fun App(
                     .clip(RoundedCornerShape(6.dp))
                     .background(ChessColors.CardBg.copy(alpha = 0.7f))
                     .clickable {
-                        val logs = DebugLog.getRecent(80)
-                        clipboardManager.setText(AnnotatedString(logs))
+                        val logs = DebugLog.getAll()
+                        platformExportLogs(
+                            logContent = logs,
+                            onSuccess = { msg -> DebugLog.info("日志", msg) },
+                            onError = { msg -> DebugLog.error("日志", msg) }
+                        )
                     }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                Text("📋 日志", fontSize = 11.sp, color = ChessColors.TextSecondary)
+                Text("📤 日志", fontSize = 11.sp, color = ChessColors.TextSecondary)
             }
         }
 
@@ -369,7 +373,7 @@ fun SelectScreen(
         val diff = DIFFICULTIES[difficulty.coerceIn(0, 3)]
         Text("AI 难度", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = ChessColors.TextPrimary)
         Spacer(Modifier.height(4.dp))
-        Text(diff.label + " · 深度 ${diff.depth} · ${diff.timeLimit / 1000}s · ≤${diff.threads}线程", fontSize = 13.sp, color = ChessColors.TextSecondary)
+        Text("${diff.label} · 搜索深度 ${diff.depth} · ${diff.timeLimit / 1000}s", fontSize = 13.sp, color = ChessColors.TextSecondary)
         Spacer(Modifier.height(16.dp))
 
         Row(
