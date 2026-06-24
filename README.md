@@ -5,13 +5,28 @@
 ## 特性
 
 - 🎮 **人机对弈** — 四级难度（初级/中级/高级/大师）
-- 🤖 **Rust AI 引擎** — 高性能搜索引擎，Negamax + PVS + LMR + Null Move Pruning
-- 📱 **Android 原生支持** — JNI 集成 Rust 引擎，极低内存占用
-- 🖥️ **Desktop 支持** — Windows/Linux/macOS 桌面端
+- 🤖 **Rust AI 引擎** — Negamax + PVS + LMR + Null Move Pruning
+- 🧠 **NNUE 神经网络** — HalfKP 架构，量化推理，自动回退 HCE
+- 📱 **Android 原生支持** — JNI 集成 Rust 引擎，4 架构支持
+- 🖥️ **Desktop 跨平台** — Windows/Linux/macOS，单文件 uber-jar 分发
 - 📖 **开局库** — 110 万+ 开局走法，加权随机选择
-- 🔄 **循环检测** — 长将/长捉/长杀等禁止着法检测
-- 🌐 **在线对弈** — 局域网/互联网对战（开发中）
+- 🔄 **循环检测** — 长将/长捉禁止着法检测，允许连将杀法
+- 📤 **日志导出** — Android 系统分享 / Desktop 保存文件
 - 🎨 **Material 3 主题** — 动态配色
+
+## 快速开始
+
+### Desktop（Windows/Linux）
+
+需要 Java 17+，下载 `chinese-chess.jar` 后运行：
+
+```bash
+java -jar chinese-chess.jar
+```
+
+### Android
+
+下载 `chinese-chess.apk` 安装。
 
 ## 架构
 
@@ -21,15 +36,14 @@
 │              (App.kt / ChessBoard.kt)       │
 ├─────────────────────────────────────────────┤
 │            Kotlin Engine Layer              │
-│  ChessEngine / ChessAI / OpeningBook / TT   │
+│  ChessEngine / AIController / OpeningBook   │
 ├──────────────────┬──────────────────────────┤
-│   Android: JNI   │   Desktop: Pure Kotlin   │
-│   NativeEngine   │   (fallback)             │
-├──────────────────┤                          │
-│   Rust Engine    │                          │
-│   (libchess_     │                          │
-│    engine.so)    │                          │
-└──────────────────┴──────────────────────────┘
+│   Android: JNI   │   Desktop: JNI           │
+│   NativeEngine   │   NativeEngine           │
+├──────────────────┴──────────────────────────┤
+│              Rust Engine                    │
+│  board / search / evaluate / nnue / tt      │
+└─────────────────────────────────────────────┘
 ```
 
 ### Rust 引擎模块
@@ -37,21 +51,13 @@
 | 模块 | 功能 |
 |------|------|
 | `types` | 棋子类型、走法编码 |
-| `board` | 棋盘表示、走法生成、合法性验证 |
-| `zobrist` | Zobrist 哈希（位置标识） |
-| `tt` | 置换表（Structure of Arrays，2MB） |
-| `evaluate` | 评估函数（棋子价值 + 位置表） |
-| `search` | 搜索引擎（Negamax/PVS/LMR/Null Move/Aspiration） |
+| `board` | 棋盘表示、走法生成、合法性验证、FEN 输出 |
+| `zobrist` | Zobrist 哈希 |
+| `tt` | 置换表（Structure of Arrays，64MB） |
+| `evaluate` | HCE 评估函数（PST + 物质价值） |
+| `nnue` | NNUE 网络（HalfKP，22680→256→32→1） |
+| `search` | 搜索引擎（Lazy SMP 多线程） |
 | `ffi` | JNI 接口导出 |
-
-## 性能对比
-
-| 指标 | Kotlin 引擎 | Rust 引擎 |
-|------|------------|-----------|
-| 大师模式搜索时间 | 10-30s+ | 1-4s |
-| 内存占用 | 200MB+ (频繁 GC) | ~2MB |
-| .so 体积 | N/A | 390-540KB |
-| GC 压力 | 严重 | 无 |
 
 ## 构建指南
 
@@ -63,6 +69,7 @@
 - Android Rust targets:
   ```bash
   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+  rustup target add x86_64-pc-windows-gnu  # Windows 交叉编译
   ```
 
 ### 编译 Rust 引擎
@@ -70,36 +77,37 @@
 ```bash
 cd engine
 
-# 编译所有 Android 架构
+# Desktop (host platform)
+cargo build --release --lib
+
+# Android (all architectures)
 ./build_android.sh
 
-# 或单独编译
-cargo build --release --target aarch64-linux-android
+# Windows 交叉编译
+cargo build --release --target x86_64-pc-windows-gnu --lib
 ```
 
-### 构建 Android APK
+### 构建应用
 
 ```bash
+# Android APK
 ./gradlew assembleDebug
-# 或 Release
-./gradlew assembleRelease
+
+# Desktop 运行
+./gradlew run
+
+# 跨平台 uber-jar (Linux + Windows, 含 NNUE)
+./gradlew packageCrossPlatformJar
+cp composeApp/build/libs/chinese-chess-crossplatform.jar chinese-chess.jar
 ```
 
-### 构建 Desktop
+### NNUE 训练
 
 ```bash
-./gradlew run          # 运行
-./gradlew packageDmg   # macOS
-./gradlew packageMsi   # Windows
-./gradlew packageDeb   # Linux
+cd engine/training
+python train_nnue.py       # 训练 NNUE
+python gen_data.py         # 生成训练数据
 ```
-
-## 分支说明
-
-| 分支 | 说明 |
-|------|------|
-| `kotlin` | 纯 Kotlin 实现，Kotlin AI 引擎 |
-| `rust` | Rust 后端引擎，JNI 集成（当前分支） |
 
 ## 难度等级
 
@@ -114,27 +122,27 @@ cargo build --release --target aarch64-linux-android
 
 ### 搜索算法
 
-- **Negamax** 带 Alpha-Beta 剪枝
-- **PVS** (Principal Variation Search)
-- **LMR** (Late Move Reductions)
-- **Null Move Pruning**
-- **Aspiration Window**
-- **Futility Pruning**
-- **Quiescence Search** (静态搜索)
-- **Iterative Deepening** (迭代加深)
-- **Killer Moves** + **History Heuristic** + **Counter Moves**
+- **Lazy SMP** 多线程：共享 TT 和 NNUE 权重
+- **Iterative Deepening** + **Aspiration Window**
+- **PVS** (Principal Variation Search) + **LMR** (Late Move Reductions)
+- **Null Move Pruning** + **Futility Pruning** + **Razoring** + **LMP**
+- **SEE** (Static Exchange Evaluation)
+- **Killer Moves** + **History Heuristic** + **Counter Moves`
 
-### 评估函数
+### NNUE
 
-- 棋子基础价值（帅10000/車600/馬270/炮285/相120/仕120/兵30-170）
-- 位置评估表（PST）— 每种棋子红/黑方独立位置分
-- 红方视角评估，取负为黑方
+HalfKP 架构，特征：`(king_square, piece_type_color, piece_square) × 2 perspectives`。网络结构：22680→256→32→1，量化推理。权重文件 `nnue_trained.bin`，加载失败时自动回退到 HCE。
 
 ### 循环检测
 
-- 基于 Zobrist 哈希历史检测重复局面
-- 长将/长捉/长杀等禁止着法过滤
-- 无合法走法时判负
+- 基于 Zobrist 哈希检测重复局面
+- 将军方：继续搜索找连将杀法
+- 被将军方：返回认输分数
+- 长将/长捉等禁止着法在 `ChessEngine.isLegalMove()` 中过滤
+
+### FEN 日志
+
+每次 AI 搜索输出 `[FEN] rnbakabnr/9/1c5c1/... w 0000000000000000`，可直接复制到调试工具还原局面。
 
 ## License
 
